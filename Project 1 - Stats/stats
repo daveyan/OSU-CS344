@@ -1,0 +1,247 @@
+#!/bin/bash
+
+
+#check to see if the user passed enough arguments
+#meaning anything less than 2 or greater than 3
+ 
+if [[ $# -lt 2 ]] || [[ $# -ge 3 ]]
+then
+	echo "Usage: stats {-row|-col} [file]" 1>&2
+	exit 1
+fi
+
+#correct amount of arguments but we need to check additional conditions
+# 1. the file must exist
+# 2. the file must be readable
+# reference: http://stackoverflow.com/questions/3767267/check-if-file-exists-and-whether-it-contains-a-specific-string
+
+if [ $# -eq 2 ]
+then
+
+	#temp file to store the name
+	file_name="temp_file$$"
+
+	#trap for the temp file	
+	trap "rm -f $file_name; exit 1" INT HUP TERM
+
+	file_name=$2
+
+	#condition 1 check
+	if ! $( [[ -e "$file_name" ]] )
+	then
+		
+		
+		echo "stats: cannot read $file_name" 1>&2
+		exit 1
+	fi
+
+	#condition 2 check
+	if ! $( [[ -r "$file_name" ]] )
+	then
+		echo "stats: cannot read $file_name" 1>&2
+		exit 1
+	fi
+fi
+
+#calculating the sum and average of a row
+#reference: http://stackoverflow.com/questions/33006845/how-to-sum-a-row-of-numbers-from-text-file-bash-shell-scripting
+
+if [[ $1 == -r* ]];
+then
+
+	numRow=0
+
+	while read row
+	do
+	#to calculate the average
+	sum=0
+	numCol=0
+
+	for num in $row
+	do
+		#sum up values in the row to calculate the average
+		sum=`expr $sum + $num`
+
+		#add value to array rowArr to calculate the median 
+		rowArr[$numCol]=$num
+
+		#increase array + 1 for the correct count
+
+		numCol=`expr $numCol + 1`
+	done
+
+	#calculate the average
+	avg=`expr $sum / $numCol`
+
+
+	#rounding the average value 
+	mod=`expr $sum % $numCol`
+
+	if [ `expr 2 \* $mod` -ge $numCol ]
+	then
+		avg=`expr $avg + 1`
+	fi
+
+	#store avg into an array for printing
+	avgArr[$numRow]=$avg
+
+	#sorting the rowArr to find the median
+	#reference: https://www.reddit.com/r/bash/comments/3cbt1p/sorting_array_of_numeric_values/
+
+	sortArr=( $(for k in "${rowArr[@]}"
+	do 
+		echo "$k"
+	done | sort -n) )
+
+
+	arrHalf=`expr $numCol / 2`
+
+	median=${sortArr[$arrHalf]}
+
+	medArr[$numRow]=$median
+
+	#now that both the values of the avg and median for the row have been stored
+	#increment to the next row
+
+	numRow=`expr $numRow + 1`
+
+done < "$file_name"
+
+#display calculations
+
+echo  "Average Median"
+
+for ((i=0; i<$numRow; i++))
+do 
+	echo "${avgArr[$i]}	${medArr[$i]}"
+done
+
+
+#calculating the average and median of a col
+elif [[ $1 == -c* ]]
+then
+
+	numRow=0
+
+	#create an array to store the calculations of each column and the row value delimited by a comma
+	#row value will be needed in the calculations of the median
+	declare -A colTotal
+
+	while read row
+	do
+		numCol=0
+		numRow=`expr $numRow + 1`
+ 
+	#get each numbers in each of the rows
+	for num in $row
+	do
+
+		#create a column sum array and store the running total
+		sum=${colSum[$numCol]}
+		#add the additional value of the col
+
+		sum=`expr $sum + $num`
+
+		#array colSum will hold the sum
+		colSum[$numCol]=$sum
+
+
+		colTotal[$numCol,$numRow]=$num
+
+
+		numCol=`expr $numCol + 1`
+
+	done
+done < "$file_name"
+
+
+
+   #calculate the average
+
+   numCol=0
+
+   	for i in ${colSum[@]}
+	do
+		avg=`expr $i / $numRow`
+
+	#rounding the average value 
+	mod=`expr $i % $numRow`		
+
+	if [ `expr 2 \* $mod` -ge $numRow ]
+	then
+		avg=`expr $avg + 1`
+	fi
+
+	#store avg into an array for printing
+	avgArr[$numCol]=$avg
+
+	numCol=`expr $numCol + 1`
+	done
+
+	#calculate median
+
+	#nest a loop to hold the number of row to be used for the median
+	for (( i=0; i<numCol; i++))
+	do
+		for ((j=1; j<=numRow; j++))
+		do
+			rowArr[$j]=${colTotal[$i,$j]}
+		done
+
+		#sort the elements in the column
+
+		sortArr=( $(for k in "${rowArr[@]}"
+		do 
+			echo "$k"
+		done | sort -n) )
+
+      
+      		arrHalf=`expr $numRow / 2`
+
+		median=${sortArr[$arrHalf]}
+
+		#store median in array
+		medArr[$i]=$median
+
+   done
+
+   #display calculations
+
+   echo "Average"
+
+   for i in ${avgArr[@]}
+   do
+        printf "$i	"
+   done
+
+   printf "\n"
+
+   echo "Median"
+   for i in ${medArr[@]}
+   do
+      printf "$i	"
+   done
+
+   printf "\n"
+
+
+#error with the usage
+else
+	echo "Usage: stats {-row|-col} [file]" 1>&2
+	exit 1
+fi 
+
+
+
+
+
+#clean up portion
+
+#removing temp_file
+if [[ -e "temp_file$$" ]]
+then
+	rm -f "tempdata$$"
+fi
+
+exit 0
+
